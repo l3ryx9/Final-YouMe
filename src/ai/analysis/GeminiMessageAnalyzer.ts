@@ -30,7 +30,7 @@ export class GeminiMessageAnalyzer {
 
   constructor() {
     this.apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? null;
-    this.model = process.env.EXPO_PUBLIC_GEMINI_MODEL ?? 'gemini-1.5-flash';
+    this.model = process.env.EXPO_PUBLIC_GEMINI_MODEL ?? 'gemini-2.5-flash';
   }
 
   isAvailable(): boolean {
