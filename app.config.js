@@ -7,7 +7,7 @@ module.exports = {
   expo: {
     name: 'YouMe',
     slug: 'youme',
-    owner: 'l3ryx91you',
+    owner: 'alemille9',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/images/logo-icon.jpg',
@@ -129,7 +129,7 @@ module.exports = {
     },
     extra: {
       router: { origin: false },
-      eas: { projectId: '42c9a389-ca72-4ba9-8bbd-f420302580d4' },
+      eas: { projectId: '99878b99-246a-4c9c-8187-b33ec4c1e864' },
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     },
