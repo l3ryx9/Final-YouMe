@@ -1,23 +1,33 @@
 /**
  * ModelDownloadManager — Mise à disposition des 3 modèles IA locaux
  *
- *   - "llm"     : Qwen2.5-1.5B-Instruct q4f16 ONNX (~1.17 Go) — EMBARQUÉ
- *   - "emotion" : CamemBERT français d'émotions     (~109 Mo)  — EMBARQUÉ
- *   - "whisper" : Whisper Small multilingue          (~241 Mo)  — EMBARQUÉ
+ *   - "llm"     : Qwen2.5-1.5B-Instruct, quantifié q4f16 (~1,17 Go)
+ *   - "emotion" : CamemBERT français d'émotions            (~109 Mo)
+ *   - "whisper" : Whisper Small multilingue                (~236 Mo)
  *
- * Les 3 modèles sont livrés directement dans `assets/ai-models/` et copiés
- * localement au premier lancement, sans aucun accès réseau (voir
- * `LocalModelInstaller` / `bundledModels.ts`).
+ * Les 3 modèles sont téléchargés au premier lancement (voir `runDownload`),
+ * soit directement depuis HuggingFace (llm, whisper — fichiers publics déjà
+ * au format ONNX), soit depuis la release GitHub `ai-models-v1` du dépôt
+ * `l3ryx9/youme-ai` (emotion — reconversion PyTorch → ONNX maison, il
+ * n'existe aucune version ONNX publique de ce modèle).
  *
- * Historique : "llm" utilisait auparavant Llama-3.2-1B-Instruct, téléchargé
- * depuis https://github.com/l3ryx9/youme-ai/releases/tag/ai-models-v1.
- * L'asset `llm-model_q4.onnx` de ce release s'est avéré incomplet (il ne
- * contenait que le graphe ONNX, ~149 Ko ; le fichier de poids externe
- * `model_q4.onnx_data`, ~1.69 Go, n'avait jamais été uploadé). Remplacé par
- * Qwen2.5-1.5B-Instruct (quantifié q4f16, ~1.17 Go), embarqué directement —
- * plus récent, plus capable, et sans dépendance à ce release. Les entrées
- * `MODEL_MANIFEST.llm` ci-dessous ne sont plus utilisées pour le
- * téléchargement mais restent en référence historique / fallback.
+ * FIX (voir diagnostic du 15/07) : le code pointait auparavant vers
+ * `l3ryx9/new-youme/releases/download/ai-models-v1`, un dépôt introuvable
+ * publiquement (404) — chaque tentative de téléchargement échouait donc
+ * instantanément, avant même de toucher au réseau lent. Le workflow GitHub
+ * Actions « 📦 Download & Upload AI Models » qui construit cette release
+ * tourne en réalité dans `l3ryx9/youme-ai`, pas `new-youme`.
+ *
+ * Historique modèle LLM : utilisait auparavant Llama-3.2-1B-Instruct. L'asset
+ * `llm-model_q4.onnx` de la release était incomplet (il ne contenait que le
+ * graphe ONNX, ~149 Ko ; le fichier de poids externe `model_q4.onnx_data`,
+ * ~1,69 Go, n'avait jamais été généré — le workflow ne le téléchargeait pas).
+ * Remplacé par Qwen2.5-1.5B-Instruct en quantification q4f16 : contrairement
+ * aux quantifications q4/fp16/fp32 de ce modèle, la variante q4f16 est un
+ * fichier `.onnx` unique et autonome (pas de `.onnx_data` externe), donc
+ * aucun risque d'upload partiel de ce type. Architecture attendue par
+ * `LLMService.ts` (num_hidden_layers=28, num_key_value_heads=2, head_dim=128)
+ * — c'est bien celle de Qwen2.5-1.5B, pas de Phi-4-mini (3.8B, incompatible).
  *
  * Synchronisation barre de progression :
  *   Le manager émet des événements status='retrying' pendant les délais de
@@ -41,26 +51,28 @@ interface ModelSpec {
 const MODELS_DIR = `${FileSystem.documentDirectory}ai-models/`;
 const STATE_FILE = `${MODELS_DIR}download-state.json`;
 
-/** Release GitHub hébergeant tous les modèles IA */
-const R  = 'https://github.com/l3ryx9/new-youme/releases/download/ai-models-v1';
+/** Release GitHub hébergeant l'asset Emotion (reconversion maison) */
+const R  = 'https://github.com/l3ryx9/youme-ai/releases/download/ai-models-v1';
 const HF = 'https://huggingface.co';
 
 export const MODEL_MANIFEST: Record<ModelId, ModelSpec> = {
   llm: {
     files: [
-      // Phi-4-mini-instruct q4 — 3.8B paramètres, 2 fichiers (graphe + poids)
-      { url: `${R}/llm-phi4-model_q4.onnx`,                                                                    filename: 'model.onnx',             approxBytes: 52_220_822     },
-      { url: `${R}/llm-phi4-model_q4.onnx_data`,                                                               filename: 'model.onnx_data',         approxBytes: 2_087_319_552  },
-      { url: `${HF}/onnx-community/Phi-4-mini-instruct-ONNX/resolve/main/tokenizer.json`,                      filename: 'tokenizer.json',          approxBytes: 1_800_000      },
-      { url: `${HF}/onnx-community/Phi-4-mini-instruct-ONNX/resolve/main/tokenizer_config.json`,               filename: 'tokenizer_config.json',   approxBytes: 8_000          },
-      { url: `${HF}/onnx-community/Phi-4-mini-instruct-ONNX/resolve/main/special_tokens_map.json`,             filename: 'special_tokens_map.json', approxBytes: 1_000          },
-      { url: `${HF}/onnx-community/Phi-4-mini-instruct-ONNX/resolve/main/config.json`,                         filename: 'config.json',             approxBytes: 2_000          },
-      { url: `${HF}/onnx-community/Phi-4-mini-instruct-ONNX/resolve/main/generation_config.json`,              filename: 'generation_config.json',  approxBytes: 500            },
+      // Qwen2.5-1.5B-Instruct q4f16 — fichier ONNX unique, sans .onnx_data
+      // externe (contrairement aux variantes q4/fp16/fp32 de ce même repo),
+      // donc aucun risque de poids manquants au moment de l'upload/download.
+      { url: `${HF}/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/onnx/model_q4f16.onnx`,           filename: 'model.onnx',             approxBytes: 1_220_000_000 },
+      { url: `${HF}/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/tokenizer.json`,                  filename: 'tokenizer.json',          approxBytes: 7_030_000     },
+      { url: `${HF}/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/tokenizer_config.json`,           filename: 'tokenizer_config.json',   approxBytes: 7_310         },
+      { url: `${HF}/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/special_tokens_map.json`,         filename: 'special_tokens_map.json', approxBytes: 613           },
+      { url: `${HF}/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/config.json`,                     filename: 'config.json',             approxBytes: 809           },
+      { url: `${HF}/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/generation_config.json`,          filename: 'generation_config.json',  approxBytes: 242           },
     ],
   },
   emotion: {
     files: [
-      // CamemBERT français — ~107 Mo (ONNX + configs depuis GitHub Release)
+      // CamemBERT français — ~107 Mo (reconverti + quantifié int8 par le
+      // workflow GitHub Actions, aucune version ONNX publique n'existe)
       { url: `${R}/emotion-model.onnx`,            filename: 'model.onnx',             approxBytes: 111_445_232 },
       { url: `${R}/emotion-tokenizer.json`,         filename: 'tokenizer.json',          approxBytes: 2_421_253  },
       { url: `${R}/emotion-tokenizer_config.json`,  filename: 'tokenizer_config.json',   approxBytes: 1_813      },
@@ -70,8 +82,9 @@ export const MODEL_MANIFEST: Record<ModelId, ModelSpec> = {
   },
   whisper: {
     files: [
-      // Whisper Small — encoder fp16 ~177 Mo + decoder int8 ~157 Mo
-      { url: `${R}/whisper-encoder.onnx`,                                                                filename: 'encoder_model.onnx',          approxBytes: 176_607_756 },
+      // Whisper Small — encoder + decoder quantifiés int8, déjà présents et
+      // corrects dans la release GitHub (seul le nom du dépôt était faux)
+      { url: `${R}/whisper-encoder.onnx`,                                                                filename: 'encoder_model.onnx',          approxBytes: 92_326_160  },
       { url: `${R}/whisper-decoder.onnx`,                                                                filename: 'decoder_model_merged.onnx',   approxBytes: 156_750_845 },
       { url: `${HF}/onnx-community/whisper-small/resolve/main/tokenizer.json`,                          filename: 'tokenizer.json',              approxBytes: 2_400_000   },
       { url: `${HF}/onnx-community/whisper-small/resolve/main/tokenizer_config.json`,                   filename: 'tokenizer_config.json',       approxBytes: 5_000       },
