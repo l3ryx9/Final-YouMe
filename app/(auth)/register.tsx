@@ -26,7 +26,6 @@ import {
 import { useYoumeColors, YoumeColors, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../src/shared/constants/theme';
 import { useAuth } from '../../src/presentation/hooks/useAuth';
 import { PasswordStrengthBar } from '../../src/presentation/components/common/PasswordStrengthBar';
-import { modelDownloadManager } from '../../src/ai/models/ModelDownloadManager';
 import { HONEYPOT_FIELD_NAME, honeypotFieldStyle, getFormOpenedAt } from '../../src/shared/utils/antiBot';
 
 export default function RegisterScreen() {
@@ -61,13 +60,10 @@ export default function RegisterScreen() {
   const onSubmit = async (data: RegisterFormData) => {
     try {
       await registerUser(data, { honeypot, formOpenedAt });
-      // FIX : l'IA locale doit se télécharger dès l'inscription (et non
-      // attendre la première connexion) afin d'être prête au plus tôt.
-      // Fire-and-forget : ne bloque jamais la navigation vers l'écran de
-      // connexion, et continue même si l'utilisateur quitte cet écran —
-      // le manager est un singleton dont la promesse vit tant que l'app
-      // est en mémoire (voir ModelDownloadManager.downloadAllModels).
-      modelDownloadManager.downloadAllModels().catch(() => {});
+      // Le téléchargement de l'IA locale a déjà eu lieu avant cet écran
+      // (voir app/index.tsx : l'utilisateur ne peut plus atteindre
+      // login/inscription tant que les modèles ne sont pas prêts), donc
+      // plus besoin de le déclencher ici.
       themedAlert.alert(
         'Compte créé !',
         'Un email de vérification a été envoyé à votre adresse. Veuillez le vérifier avant de vous connecter.',
@@ -286,4 +282,4 @@ function getStyles(colors: YoumeColors) {
     debugLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: SPACING.lg },
     debugLinkText: { color: colors.textMuted, fontSize: TYPOGRAPHY.size.xs },
   });
-}
+                  }
