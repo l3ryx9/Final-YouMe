@@ -245,7 +245,20 @@ const reactionSt = StyleSheet.create({
 
 // ─── MessageBubble principal ──────────────────────────────────────────────────
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+/**
+ * FIX PERF : mémoïsé avec React.memo. Sans ça, chaque re-render de l'écran
+ * de chat (frappe dans le champ texte, changement de présence, ouverture
+ * d'une modale, nouveau message reçu…) réexécutait le rendu de TOUTES les
+ * bulles visibles, même celles dont rien n'avait changé — de plus en plus
+ * coûteux à mesure que la conversation grandit. Les objets `message`
+ * individuels gardent une référence stable dans le store (voir
+ * conversationStore.ts : seul le message modifié change de référence lors
+ * d'un update), donc la comparaison superficielle par défaut de React.memo
+ * fonctionne correctement ici — à condition que les callbacks `onAIPress`/
+ * `onReaction` reçus soient eux aussi stables (voir chat/[id].tsx : ils sont
+ * désormais définis via useCallback plutôt que recréés à chaque rendu).
+ */
+const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   message,
   isOwn,
   currentUserId,
@@ -382,6 +395,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     </View>
   );
 };
+
+export const MessageBubble = React.memo(MessageBubbleComponent);
 
 function getStyles(colors: YoumeColors) {
   return StyleSheet.create({
