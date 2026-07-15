@@ -1,0 +1,173 @@
+name: 📦 Embarquer les modèles IA (réels) dans le repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: 'Modèles à traiter'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - llm
+          - emotion
+          - whisper
+      branch:
+        description: 'Branche cible pour le commit'
+        required: false
+        default: 'main'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  embed-models:
+    name: "Télécharger et embarquer les modèles réels"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (avec LFS)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          lfs: true
+
+      - name: Vérifier / activer Git LFS pour les .onnx
+        run: |
+          set -e
+          git lfs install
+          if ! grep -q '\*.onnx_data' .gitattributes 2>/dev/null; then
+            echo '*.onnx_data filter=lfs diff=lfs merge=lfs -text' >> .gitattributes
+          fi
+          cat .gitattributes
+
+      - name: "LLM — Télécharger Qwen2.5-1.5B-Instruct (q4f16, ~1.22 Go)"
+        if: ${{ inputs.models == 'all' || inputs.models == 'llm' }}
+        run: |
+          set -e
+          BASE="https://huggingface.co/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main"
+          mkdir -p assets/ai-models/llm
+
+          wget --tries=5 --retry-connrefused --waitretry=10 \
+               --timeout=120 --progress=bar:force \
+               "$BASE/onnx/model_q4f16.onnx" -O assets/ai-models/llm/model.onnx
+
+          wget -q "$BASE/tokenizer.json"          -O assets/ai-models/llm/tokenizer.json
+          wget -q "$BASE/tokenizer_config.json"   -O assets/ai-models/llm/tokenizer_config.json
+          wget -q "$BASE/special_tokens_map.json" -O assets/ai-models/llm/special_tokens_map.json
+          wget -q "$BASE/config.json"             -O assets/ai-models/llm/config.json
+          wget -q "$BASE/generation_config.json"  -O assets/ai-models/llm/generation_config.json
+
+          for f in assets/ai-models/llm/*; do
+            if head -c 100 "$f" | grep -qi '<html'; then
+              echo "❌ $f ressemble à une page d'erreur HTML" >&2
+              exit 1
+            fi
+          done
+          echo "✅ LLM téléchargé — taille :" && du -sh assets/ai-models/llm/*
+
+      - name: Set up Python
+        if: ${{ inputs.models == 'all' || inputs.models == 'emotion' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Emotion — Installer les outils de conversion"
+        if: ${{ inputs.models == 'all' || inputs.models == 'emotion' }}
+        run: |
+          pip install --quiet --upgrade pip
+          pip install --quiet "transformers>=4.41" "optimum[exporters,onnxruntime]" sentencepiece protobuf onnx onnxruntime
+
+      - name: "Emotion — Exporter CamemBERT vers ONNX"
+        if: ${{ inputs.models == 'all' || inputs.models == 'emotion' }}
+        run: |
+          set -e
+          SRC="astrosbd/french_emotion_camembert"
+
+          optimum-cli export onnx \
+            --model "$SRC" \
+            --task text-classification \
+            emotion_onnx
+
+          python3 - <<'PY'
+          from transformers import AutoTokenizer
+          tok = AutoTokenizer.from_pretrained("astrosbd/french_emotion_camembert", use_fast=True)
+          tok.save_pretrained("emotion_onnx")
+          print("tokenizer.json écrit :", tok.is_fast)
+          PY
+
+      - name: "Emotion — Quantifier en int8"
+        if: ${{ inputs.models == 'all' || inputs.models == 'emotion' }}
+        run: |
+          set -e
+          python3 - <<'PY'
+          from optimum.onnxruntime import ORTQuantizer
+          from optimum.onnxruntime.configuration import AutoQuantizationConfig
+
+          quantizer = ORTQuantizer.from_pretrained("emotion_onnx", file_name="model.onnx")
+          qconfig = AutoQuantizationConfig.avx2(is_static=False, per_channel=False)
+          quantizer.quantize(save_dir="emotion_onnx_quantized", quantization_config=qconfig)
+          PY
+
+      - name: "Emotion — Copier les assets réels dans le repo"
+        if: ${{ inputs.models == 'all' || inputs.models == 'emotion' }}
+        run: |
+          set -e
+          mkdir -p assets/ai-models/emotion
+          cp emotion_onnx_quantized/model_quantized.onnx assets/ai-models/emotion/model.onnx
+          cp emotion_onnx/tokenizer.json                 assets/ai-models/emotion/tokenizer.json
+          cp emotion_onnx/tokenizer_config.json          assets/ai-models/emotion/tokenizer_config.json
+          cp emotion_onnx/special_tokens_map.json        assets/ai-models/emotion/special_tokens_map.json
+          cp emotion_onnx/config.json                    assets/ai-models/emotion/config.json
+          echo "✅ Emotion prêt — taille :" && du -sh assets/ai-models/emotion/*
+
+      - name: "Whisper — Télécharger Whisper Small multilingue"
+        if: ${{ inputs.models == 'all' || inputs.models == 'whisper' }}
+        run: |
+          set -e
+          BASE="https://huggingface.co/onnx-community/whisper-small/resolve/main"
+          mkdir -p assets/ai-models/whisper
+
+          wget --tries=5 --retry-connrefused --waitretry=10 \
+               --timeout=120 --progress=bar:force \
+               "$BASE/onnx/encoder_model.onnx" -O assets/ai-models/whisper/encoder_model.onnx
+
+          wget --tries=5 --retry-connrefused --waitretry=10 \
+               --timeout=120 --progress=bar:force \
+               "$BASE/onnx/decoder_model_merged.onnx" -O assets/ai-models/whisper/decoder_model_merged.onnx
+
+          wget -q "$BASE/tokenizer.json"           -O assets/ai-models/whisper/tokenizer.json
+          wget -q "$BASE/tokenizer_config.json"    -O assets/ai-models/whisper/tokenizer_config.json
+          wget -q "$BASE/config.json"              -O assets/ai-models/whisper/config.json
+          wget -q "$BASE/generation_config.json"   -O assets/ai-models/whisper/generation_config.json
+          wget -q "$BASE/preprocessor_config.json" -O assets/ai-models/whisper/preprocessor_config.json
+          wget -q "$BASE/special_tokens_map.json"  -O assets/ai-models/whisper/special_tokens_map.json
+          wget -q "$BASE/normalizer.json"          -O assets/ai-models/whisper/normalizer.json
+          wget -q "$BASE/added_tokens.json"        -O assets/ai-models/whisper/added_tokens.json
+
+          for f in assets/ai-models/whisper/*; do
+            if head -c 100 "$f" | grep -qi '<html'; then
+              echo "❌ $f ressemble à une page d'erreur HTML" >&2
+              exit 1
+            fi
+          done
+          echo "✅ Whisper prêt — taille :" && du -sh assets/ai-models/whisper/*
+
+      - name: Committer les modèles réels dans le repo
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .gitattributes assets/ai-models
+          if git diff --cached --quiet; then
+            echo "Rien de nouveau à committer."
+          else
+            git commit -m "chore(ai-models): embed real model weights (llm/emotion/whisper) for offline bundling"
+            git push origin HEAD:${{ inputs.branch }}
+          fi
+
+      - name: Résumé
+        run: |
+          echo "### Modèles embarqués dans assets/ai-models/" >> $GITHUB_STEP_SUMMARY
+          du -sh assets/ai-models/*/* 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
