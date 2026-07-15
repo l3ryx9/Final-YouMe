@@ -3,7 +3,7 @@
  *
  *   - "llm"     : Qwen2.5-1.5B-Instruct, quantifié q4f16 (~1,17 Go)
  *   - "emotion" : CamemBERT français d'émotions            (~109 Mo)
- *   - "whisper" : Whisper Small multilingue                (~236 Mo)
+ *   - "whisper" : Whisper Small multilingue                (~320 Mo)
  *
  * Les 3 modèles sont téléchargés au premier lancement (voir `runDownload`),
  * soit directement depuis HuggingFace (llm, whisper — fichiers publics déjà
@@ -28,6 +28,9 @@
  * aucun risque d'upload partiel de ce type. Architecture attendue par
  * `LLMService.ts` (num_hidden_layers=28, num_key_value_heads=2, head_dim=128)
  * — c'est bien celle de Qwen2.5-1.5B, pas de Phi-4-mini (3.8B, incompatible).
+ *
+ * FIX PERF (voir runDownload) : les 3 modèles sont téléchargés en parallèle,
+ * pas séquentiellement.
  *
  * Synchronisation barre de progression :
  *   Le manager émet des événements status='retrying' pendant les délais de
@@ -82,9 +85,9 @@ export const MODEL_MANIFEST: Record<ModelId, ModelSpec> = {
   },
   whisper: {
     files: [
-      // Whisper Small — encoder + decoder quantifiés int8, déjà présents et
-      // corrects dans la release GitHub (seul le nom du dépôt était faux)
-      { url: `${R}/whisper-encoder.onnx`,                                                                filename: 'encoder_model.onnx',          approxBytes: 92_326_160  },
+      // Whisper Small — encoder fp16 (meilleure précision de transcription
+      // que la variante quantifiée int8) + decoder quantifié int8
+      { url: `${R}/whisper-encoder.onnx`,                                                                filename: 'encoder_model.onnx',          approxBytes: 176_607_756 },
       { url: `${R}/whisper-decoder.onnx`,                                                                filename: 'decoder_model_merged.onnx',   approxBytes: 156_750_845 },
       { url: `${HF}/onnx-community/whisper-small/resolve/main/tokenizer.json`,                          filename: 'tokenizer.json',              approxBytes: 2_400_000   },
       { url: `${HF}/onnx-community/whisper-small/resolve/main/tokenizer_config.json`,                   filename: 'tokenizer_config.json',       approxBytes: 5_000       },
@@ -193,35 +196,73 @@ export class ModelDownloadManager {
     return this.downloadPromise;
   }
 
+  /**
+   * FIX PERF : les 3 modèles sont désormais téléchargés EN PARALLÈLE (au
+   * lieu d'un par un, fichier par fichier). Sur une connexion correcte, ça
+   * réduit significativement l'attente au premier lancement — la bande
+   * passante restait sous-utilisée par le mode séquentiel précédent, et
+   * plusieurs connexions concurrentes vers des hôtes différents (HuggingFace
+   * pour llm/whisper, GitHub pour emotion) atteignent en pratique un débit
+   * agrégé supérieur à une seule connexion à la fois.
+   *
+   * La progression globale n'a donc plus de notion "avant/après" entre
+   * modèles : elle est recalculée à chaque évènement à partir d'une carte
+   * partagée `bytesDoneByModel`, mise à jour par chaque téléchargement de
+   * modèle indépendamment.
+   */
   private async runDownload(): Promise<void> {
     await FileSystem.makeDirectoryAsync(MODELS_DIR, { intermediates: true }).catch(() => {});
     const state = await this.readState();
 
-    const bytesBeforeModel = (modelId: ModelId): number => {
-      let done = 0;
-      for (const [id, spec] of Object.entries(MODEL_MANIFEST) as [ModelId, ModelSpec][]) {
-        if (id === modelId) break;
-        done += spec.files.reduce((s, f) => s + f.approxBytes, 0);
-      }
-      return done;
+    const bytesDoneByModel: Record<ModelId, number> = { llm: 0, emotion: 0, whisper: 0 };
+
+    const emitOverall = (
+      modelId: ModelId,
+      filename: string,
+      fileIndex: number,
+      fileCountForModel: number,
+      status: 'downloading' | 'retrying',
+      extra?: { retryAttempt?: number; retryMaxAttempts?: number; retryDelayMs?: number }
+    ) => {
+      const totalDone = (Object.values(bytesDoneByModel) as number[]).reduce((a, b) => a + b, 0);
+      this.emit({
+        modelId,
+        filename,
+        fileIndex,
+        fileCountForModel,
+        overallProgress: Math.min(totalDone / TOTAL_APPROX_BYTES, status === 'downloading' ? 1 : 0.999),
+        status,
+        ...extra,
+      });
     };
 
-    let bytesDoneAcrossAllModels = 0;
+    // Écritures d'état sérialisées : deux modèles peuvent finir quasi en
+    // même temps, `writeState` est un read-modify-write sur un fichier JSON
+    // partagé — sans sérialisation, l'écriture la plus lente pourrait
+    // écraser celle d'un autre modèle terminé entre-temps. `state` reste un
+    // objet partagé muté de façon synchrone avant chaque écriture, donc même
+    // dans le pire cas la version finalement persistée reflète toujours les
+    // deux modèles (voir markModelComplete) ; ce verrou évite simplement les
+    // écritures concurrentes inutiles.
+    let stateWriteQueue: Promise<void> = Promise.resolve();
+    const markModelComplete = (modelId: ModelId): Promise<void> => {
+      state.completedModels = Array.from(new Set([...state.completedModels, modelId]));
+      stateWriteQueue = stateWriteQueue.then(() => this.writeState(state));
+      return stateWriteQueue;
+    };
 
-    for (const modelId of Object.keys(MODEL_MANIFEST) as ModelId[]) {
+    const downloadOneModel = async (modelId: ModelId): Promise<void> => {
+      const spec = MODEL_MANIFEST[modelId];
+      const modelTotalBytes = spec.files.reduce((s, f) => s + f.approxBytes, 0);
+
       if (await this.isModelReady(modelId)) {
-        bytesDoneAcrossAllModels =
-          bytesBeforeModel(modelId) +
-          MODEL_MANIFEST[modelId].files.reduce((s, f) => s + f.approxBytes, 0);
-        continue;
+        bytesDoneByModel[modelId] = modelTotalBytes;
+        emitOverall(modelId, '', spec.files.length, spec.files.length, 'downloading');
+        return;
       }
 
-      const spec = MODEL_MANIFEST[modelId];
       const modelDir = this.getModelDir(modelId);
       await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true }).catch(() => {});
-
-      const modelBaseBytes = bytesBeforeModel(modelId);
-      let bytesDoneInModel = 0;
 
       if (isModelBundled(modelId)) {
         // Modèle livré dans le bundle natif (assets/ai-models/) : simple
@@ -230,29 +271,10 @@ export class ModelDownloadManager {
         // téléchargement réseau ci-dessous.
         try {
           await installBundledModel(modelId, (id) => this.getModelDir(id));
-          bytesDoneInModel = spec.files.reduce((s, f) => s + f.approxBytes, 0);
-          this.emit({
-            modelId,
-            filename: '',
-            fileIndex: spec.files.length,
-            fileCountForModel: spec.files.length,
-            overallProgress: Math.min((modelBaseBytes + bytesDoneInModel) / TOTAL_APPROX_BYTES, 0.999),
-            status: 'downloading',
-          });
-
-          state.completedModels = Array.from(new Set([...state.completedModels, modelId]));
-          await this.writeState(state);
-
-          bytesDoneAcrossAllModels = modelBaseBytes + bytesDoneInModel;
-          this.emit({
-            modelId,
-            filename: '',
-            fileIndex: spec.files.length,
-            fileCountForModel: spec.files.length,
-            overallProgress: Math.min(bytesDoneAcrossAllModels / TOTAL_APPROX_BYTES, 1),
-            status: 'downloading',
-          });
-          continue;
+          bytesDoneByModel[modelId] = modelTotalBytes;
+          await markModelComplete(modelId);
+          emitOverall(modelId, '', spec.files.length, spec.files.length, 'downloading');
+          return;
         } catch (bundleErr) {
           console.warn(
             `[ModelDownloadManager] Installation embarquée échouée pour "${modelId}", ` +
@@ -265,6 +287,7 @@ export class ModelDownloadManager {
         }
       }
 
+      let bytesDoneInModel = 0;
       for (let i = 0; i < spec.files.length; i++) {
         const file = spec.files[i];
         const destPath = this.getFilePath(modelId, file.filename);
@@ -277,24 +300,11 @@ export class ModelDownloadManager {
             (bytesWritten, expectedBytes) => {
               const fileSize = (expectedBytes && expectedBytes > 0) ? expectedBytes : file.approxBytes;
               const normalizedBytes = Math.min(bytesWritten, fileSize) * (file.approxBytes / fileSize);
-              const overall = (modelBaseBytes + bytesDoneInModel + normalizedBytes) / TOTAL_APPROX_BYTES;
-              this.emit({
-                modelId,
-                filename: file.filename,
-                fileIndex: i,
-                fileCountForModel: spec.files.length,
-                overallProgress: Math.min(overall, 0.999),
-                status: 'downloading',
-              });
+              bytesDoneByModel[modelId] = bytesDoneInModel + normalizedBytes;
+              emitOverall(modelId, file.filename, i, spec.files.length, 'downloading');
             },
-            (attempt, maxAttempts, delayMs, currentOverall) => {
-              this.emit({
-                modelId,
-                filename: file.filename,
-                fileIndex: i,
-                fileCountForModel: spec.files.length,
-                overallProgress: currentOverall,
-                status: 'retrying',
+            (attempt, maxAttempts, delayMs) => {
+              emitOverall(modelId, file.filename, i, spec.files.length, 'retrying', {
                 retryAttempt: attempt,
                 retryMaxAttempts: maxAttempts,
                 retryDelayMs: delayMs,
@@ -304,20 +314,24 @@ export class ModelDownloadManager {
         }
 
         bytesDoneInModel += file.approxBytes;
+        bytesDoneByModel[modelId] = bytesDoneInModel;
       }
 
-      state.completedModels = Array.from(new Set([...state.completedModels, modelId]));
-      await this.writeState(state);
+      await markModelComplete(modelId);
+      emitOverall(modelId, '', spec.files.length, spec.files.length, 'downloading');
+    };
 
-      bytesDoneAcrossAllModels = modelBaseBytes + bytesDoneInModel;
-      this.emit({
-        modelId,
-        filename: '',
-        fileIndex: spec.files.length,
-        fileCountForModel: spec.files.length,
-        overallProgress: Math.min(bytesDoneAcrossAllModels / TOTAL_APPROX_BYTES, 1),
-        status: 'downloading',
-      });
+    const modelIds = Object.keys(MODEL_MANIFEST) as ModelId[];
+    const results = await Promise.allSettled(modelIds.map(downloadOneModel));
+
+    const firstFailure = results.find(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+    if (firstFailure) {
+      // Les modèles qui ont réussi restent téléchargés sur disque (fichiers
+      // déjà écrits + state.json à jour pour eux) — un retry ne les
+      // re-télécharge pas, seul celui qui a échoué sera retenté.
+      throw firstFailure.reason;
     }
   }
 
@@ -325,12 +339,11 @@ export class ModelDownloadManager {
     url: string,
     destPath: string,
     onBytes: (bytesWritten: number, expectedBytes?: number) => void,
-    onRetry: (attempt: number, maxAttempts: number, delayMs: number, currentOverall: number) => void
+    onRetry: (attempt: number, maxAttempts: number, delayMs: number) => void
   ): Promise<void> {
     const tmpPath = `${destPath}.part`;
     let lastError: unknown;
     let resumeData: string | undefined;
-    const lastKnownOverall = 0;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       let resumable: FileSystem.DownloadResumable | undefined;
@@ -398,7 +411,7 @@ export class ModelDownloadManager {
           const tickMs = 1000;
           let elapsed = 0;
           while (elapsed < delay) {
-            onRetry(attempt, MAX_ATTEMPTS, delay - elapsed, lastKnownOverall);
+            onRetry(attempt, MAX_ATTEMPTS, delay - elapsed);
             await new Promise((r) => setTimeout(r, Math.min(tickMs, delay - elapsed)));
             elapsed += tickMs;
           }
