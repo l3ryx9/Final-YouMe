@@ -1,7 +1,5 @@
 name: EAS Build — Production (iOS + Android)
 
-# Déclenché uniquement sur un push vers main (merge de PR)
-# ou manuellement via workflow_dispatch
 on:
   push:
     branches:
@@ -32,14 +30,19 @@ jobs:
       - name: Pull Git LFS objects (modèles IA)
         run: git lfs pull
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "yarn"
+          cache: "pnpm"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Setup EAS
         uses: expo/expo-github-action@v8
@@ -66,7 +69,6 @@ jobs:
           EXPO_PUBLIC_GEMINI_MODEL: gemini-2.5-flash
           EXPO_PUBLIC_APP_ENV: production
 
-      # Crée une release GitHub automatiquement après un build prod réussi
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: actions/create-release@v1
