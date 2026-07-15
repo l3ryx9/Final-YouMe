@@ -1,0 +1,48 @@
+name: Supabase Migrations
+
+# Se déclenche à chaque push sur main ET peut être lancé manuellement
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/**.sql'   # uniquement si un fichier SQL change
+  workflow_dispatch:                    # bouton "Run workflow" dans GitHub
+
+jobs:
+  migrate:
+    name: Appliquer les migrations SQL
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Récupérer le code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Installer le CLI Supabase
+      - name: Installer Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # 3. Lier le projet Supabase (pas besoin de Docker local)
+      - name: Lier le projet Supabase
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_ID"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID:   ${{ secrets.SUPABASE_PROJECT_ID }}
+
+      # 4. Appliquer toutes les migrations non encore appliquées
+      - name: Appliquer les migrations
+        run: |
+          supabase db push --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN:  ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID:    ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD:   ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # 5. Résumé visible dans l'onglet Actions
+      - name: Résumé
+        if: success()
+        run: echo "✅ Migrations appliquées avec succès sur le projet ${{ secrets.SUPABASE_PROJECT_ID }}"
