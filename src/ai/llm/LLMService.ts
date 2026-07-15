@@ -40,7 +40,7 @@ const DEFAULT_CONFIG: LLMConfig = {
   topP: 0.9,
 };
 
-// Architecture Llama 3.2 3B Instruct (config.json du modèle)
+// Architecture Qwen2.5-1.5B-Instruct (config.json du modèle)
 const NUM_LAYERS = 28;
 const NUM_KV_HEADS = 2;
 const HEAD_DIM = 128;
@@ -85,7 +85,7 @@ export class LLMService {
       if (typeof tokenizerEos === 'number') this.eosTokenIds.add(tokenizerEos);
 
       this.isModelLoaded = true;
-      console.log('[LLMService] Modèle Llama 3.2 3B Instruct chargé.');
+      console.log('[LLMService] Modèle Qwen2.5-1.5B-Instruct chargé.');
       return true;
     } catch (error) {
       console.error("[LLMService] Erreur d'initialisation :", error);
