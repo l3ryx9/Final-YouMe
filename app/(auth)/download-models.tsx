@@ -5,15 +5,16 @@
  * ModelDownloadManager, y compris les états de reconnexion (retrying)
  * avec compte à rebours, pour ne jamais paraître gelé.
  */
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { ProgressBar } from 'react-native-paper';
+import { Button, ProgressBar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import {
   modelDownloadManager,
   type ModelDownloadProgress,
 } from '../../src/ai/models/ModelDownloadManager';
+import { useAuthStore } from '../../src/presentation/stores/authStore';
 import { useYoumeColors, YoumeColors, YOUME_COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../src/shared/constants/theme';
 
 const MODEL_LABELS: Record<ModelDownloadProgress['modelId'], string> = {
@@ -37,8 +38,31 @@ export default function DownloadModelsScreen() {
   const startedRef = useRef(false);
   const colors = useYoumeColors();
   const styles = useMemo(() => getStyles(colors), [colors]);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   const remainingSecs = retryState ? Math.ceil(retryState.remainingMs / 1000) : 0;
+
+  // Cet écran est désormais affiché AVANT login/inscription (voir
+  // app/index.tsx), donc la destination une fois passé n'est plus toujours
+  // les tabs : un utilisateur non connecté doit atterrir sur login.
+  const goToNextScreen = useCallback(() => {
+    router.replace(isAuthenticated ? '/(app)/(tabs)/' : '/(auth)/login');
+  }, [isAuthenticated]);
+
+  const startDownload = useCallback(() => {
+    setHasError(false);
+    modelDownloadManager
+      .downloadAllModels()
+      .then(() => {
+        setRetryState(null);
+        setIsDone(true);
+      })
+      .catch((error) => {
+        console.error('[DownloadModelsScreen] Erreur de téléchargement :', error);
+        setRetryState(null);
+        setHasError(true);
+      });
+  }, []);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -60,30 +84,18 @@ export default function DownloadModelsScreen() {
       setCurrentLabel(MODEL_LABELS[p.modelId] ?? p.modelId);
     });
 
-    modelDownloadManager
-      .downloadAllModels()
-      .then(() => {
-        setRetryState(null);
-        setIsDone(true);
-      })
-      .catch((error) => {
-        console.error('[DownloadModelsScreen] Erreur de téléchargement :', error);
-        setRetryState(null);
-        setHasError(true);
-      });
+    startDownload();
 
     return unsubscribe;
-  }, []);
+  }, [startDownload]);
 
   // FIX : plus de bouton "Continuer" — navigation automatique dès que le
   // téléchargement est terminé (court délai pour laisser voir la coche verte).
   useEffect(() => {
     if (!isDone) return;
-    const timer = setTimeout(() => {
-      router.replace('/(app)/(tabs)/');
-    }, 700);
+    const timer = setTimeout(goToNextScreen, 700);
     return () => clearTimeout(timer);
-  }, [isDone]);
+  }, [isDone, goToNextScreen]);
 
   return (
     <View style={styles.container}>
@@ -144,12 +156,35 @@ export default function DownloadModelsScreen() {
           </View>
         )}
 
-        {/* Erreur finale — seulement après épuisement des 7 tentatives */}
+        {/* Erreur finale — seulement après épuisement des 7 tentatives.
+            FIX : cet écran précède désormais login/inscription, donc une
+            erreur ne doit plus jamais bloquer l'utilisateur indéfiniment —
+            on lui propose de continuer en mode dégradé ou de réessayer. */}
         {hasError && !isDone && (
-          <Text style={styles.errorText}>
-            Le téléchargement a échoué après plusieurs tentatives. L'application reste utilisable
-            (analyses simplifiées) — vous pourrez retenter plus tard.
-          </Text>
+          <>
+            <Text style={styles.errorText}>
+              Le téléchargement a échoué après plusieurs tentatives. L'application reste utilisable
+              (analyses simplifiées) — vous pourrez retenter plus tard.
+            </Text>
+            <Button
+              mode="contained"
+              onPress={goToNextScreen}
+              style={styles.button}
+              contentStyle={styles.buttonContent}
+              buttonColor={colors.primary}
+            >
+              Continuer sans l'IA locale
+            </Button>
+            <Button
+              mode="outlined"
+              onPress={startDownload}
+              style={styles.button}
+              contentStyle={styles.buttonContent}
+              textColor={colors.primary}
+            >
+              Réessayer
+            </Button>
+          </>
         )}
 
       </View>
