@@ -12,12 +12,15 @@
  * Limite de débit : 1 appel toutes les 4 secondes (plan gratuit = 15 req/min).
  * Les messages trop courts (< 10 car.) sont ignorés silencieusement.
  *
- * API gratuite : https://aistudio.google.com (clé dans EXPO_PUBLIC_GEMINI_API_KEY)
+ * FIX SÉCURITÉ : l'appel Gemini passe désormais par l'Edge Function
+ * `gemini-proxy` (clé API et modèle définis côté serveur) au lieu d'un
+ * fetch direct avec une clé embarquée dans le bundle client. Voir
+ * GeminiProxyService.ts et supabase/functions/gemini-proxy/index.ts.
  */
 import type { FlagAnalysisResult, RelationshipFlag, FlagSeverity } from '@domain/entities/Memory';
 import type { Message } from '@domain/entities/Message';
-
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+import { geminiProxyService } from '@infrastructure/supabase/GeminiProxyService';
+import { useAuthStore } from '@presentation/stores/authStore';
 
 /** Longueur minimale d'un message pour déclencher l'analyse */
 const MIN_TEXT_LENGTH = 10;
@@ -39,16 +42,10 @@ interface SingleMessageFlagResult {
 }
 
 export class GeminiFlagAnalysisModule {
-  private apiKey: string | null;
-  private model: string;
-
-  constructor() {
-    this.apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? null;
-    this.model = process.env.EXPO_PUBLIC_GEMINI_MODEL ?? 'gemini-2.5-flash';
-  }
-
   isAvailable(): boolean {
-    return this.apiKey !== null && this.apiKey.length > 0;
+    // La clé vit désormais côté serveur — la seule condition côté client
+    // est d'avoir une session active (l'Edge Function exige un JWT valide).
+    return useAuthStore.getState().isAuthenticated;
   }
 
   /**
@@ -130,8 +127,6 @@ export class GeminiFlagAnalysisModule {
     sender: string,
     partnerName: string
   ): Promise<SingleMessageFlagResult | null> {
-    const url = `${GEMINI_API_URL}/${this.model}:generateContent?key=${this.apiKey}`;
-
     const prompt = `Tu es un système d'analyse de la santé relationnelle. Analyse CE SEUL MESSAGE et détecte s'il contient un RED FLAG, un GREEN FLAG, ou aucun signal clair.
 
 Expéditeur : ${sender}
@@ -158,27 +153,22 @@ JSON attendu :
   "confidence": 0.0
 }`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          topK: 20,
-          topP: 0.9,
-          maxOutputTokens: 256,
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        ],
-      }),
+    const data = await geminiProxyService.generateContent({
+      prompt,
+      generationConfig: {
+        temperature: 0.1,
+        topK: 20,
+        topP: 0.9,
+        maxOutputTokens: 256,
+      },
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ],
     });
 
-    if (!response.ok) return null;
+    if (!data) return null;
 
-    const data = await response.json();
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
     const jsonMatch =
