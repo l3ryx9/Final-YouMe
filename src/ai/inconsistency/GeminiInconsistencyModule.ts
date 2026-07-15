@@ -4,8 +4,7 @@
  * Déclenché UNIQUEMENT quand plusieurs incohérences sont détectées
  * sur un même sujet dans une conversation.
  *
- * Utilise l'API Gemini (gratuite jusqu'à 15 req/min) pour produire
- * une analyse approfondie incluant :
+ * Utilise l'API Gemini pour produire une analyse approfondie incluant :
  * - Chronologie complète des déclarations
  * - Analyse des contradictions
  * - Variations émotionnelles
@@ -16,29 +15,30 @@
  * SÉPARATION CLAIRE : faits observés vs interprétations du modèle.
  * L'interface utilisateur doit toujours distinguer ces deux catégories.
  *
- * API Gratuite : https://aistudio.google.com (clé API requise dans .env)
+ * FIX SÉCURITÉ : l'appel Gemini passe désormais par l'Edge Function
+ * `gemini-proxy` (clé API et modèle définis côté serveur) au lieu d'un
+ * fetch direct avec une clé embarquée dans le bundle client. Voir
+ * GeminiProxyService.ts et supabase/functions/gemini-proxy/index.ts.
  */
 import type { InconsistencyRecord, GeminiAnalysisResult, TimelineEntry, ContradictionDetail } from '@domain/entities/Memory';
 import type { Message } from '@domain/entities/Message';
-
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+import { geminiProxyService } from '@infrastructure/supabase/GeminiProxyService';
+import { useAuthStore } from '@presentation/stores/authStore';
 
 export class GeminiInconsistencyModule {
-  private apiKey: string | null;
-  private model: string;
   private triggerCount: number;
 
   constructor() {
-    this.apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? null;
-    this.model = process.env.EXPO_PUBLIC_GEMINI_MODEL ?? 'gemini-2.5-flash';
     this.triggerCount = Number(process.env.EXPO_PUBLIC_GEMINI_TRIGGER_COUNT ?? '3');
   }
 
   /**
    * Retourne true si le module Gemini est configuré et disponible.
+   * La clé vit désormais côté serveur — la seule condition côté client est
+   * d'avoir une session active (l'Edge Function exige un JWT valide).
    */
   isAvailable(): boolean {
-    return this.apiKey !== null && this.apiKey.length > 0;
+    return useAuthStore.getState().isAuthenticated;
   }
 
   /**
@@ -81,31 +81,25 @@ export class GeminiInconsistencyModule {
   }
 
   private async callGeminiAPI(prompt: string): Promise<any> {
-    const url = `${GEMINI_API_URL}/${this.model}:generateContent?key=${this.apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 2048,
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        ],
-      }),
+    const data = await geminiProxyService.generateContent({
+      prompt,
+      generationConfig: {
+        temperature: 0.2,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      },
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ],
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`API Gemini error ${response.status}: ${JSON.stringify(error)}`);
+    if (!data) {
+      throw new Error('gemini-proxy indisponible (session absente, panne, ou rate limit)');
     }
 
-    return response.json();
+    return data;
   }
 
   private buildAnalysisPrompt(
