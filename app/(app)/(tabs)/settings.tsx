@@ -34,35 +34,6 @@ interface SettingRow {
   danger?: boolean;
 }
 
-/** Statut visuel d'un modèle embarqué */
-function ModelStatusBadge({ downloaded }: { downloaded: boolean }) {
-  const colors = useYoumeColors();
-  return (
-    <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: downloaded ? `${colors.success ?? '#4CAF50'}18` : `${colors.textMuted}18`,
-      borderRadius: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-    }}>
-      <Ionicons
-        name={downloaded ? 'checkmark-circle' : 'cloud-download-outline'}
-        size={13}
-        color={downloaded ? (colors.success ?? '#4CAF50') : colors.textMuted}
-      />
-      <Text style={{
-        fontSize: 11,
-        fontWeight: '600',
-        color: downloaded ? (colors.success ?? '#4CAF50') : colors.textMuted,
-      }}>
-        {downloaded ? 'Installé' : 'Non installé'}
-      </Text>
-    </View>
-  );
-}
-
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const { setUser } = useAuthStore();
@@ -276,68 +247,6 @@ export default function SettingsScreen() {
         ]}
       />
 
-      {/* Intelligence Artificielle — statut des modèles */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Intelligence Artificielle</Text>
-        <View style={styles.sectionContent}>
-          {/* Whisper */}
-          <View style={[styles.row, styles.rowBorder]}>
-            <View style={styles.rowIcon}>
-              <Ionicons name="mic-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={styles.rowLabel}>Whisper Tiny</Text>
-              <Text style={styles.rowDescription}>Transcription vocale · ~241 Mo</Text>
-            </View>
-            <ModelStatusBadge downloaded />
-          </View>
-
-          {/* DistilBERT */}
-          <View style={[styles.row, styles.rowBorder]}>
-            <View style={styles.rowIcon}>
-              <Ionicons name="heart-half-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={styles.rowLabel}>DistilBERT Emotion</Text>
-              <Text style={styles.rowDescription}>Analyse émotionnelle · ~109 Mo</Text>
-            </View>
-            <ModelStatusBadge downloaded />
-          </View>
-
-          {/* Qwen LLM */}
-          <View style={[styles.row, styles.rowBorder]}>
-            <View style={styles.rowIcon}>
-              <Ionicons name="sparkles-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={styles.rowLabel}>Qwen2.5-1.5B</Text>
-              <Text style={styles.rowDescription}>Analyse sémantique · ~1.17 Go</Text>
-            </View>
-            <ModelStatusBadge downloaded />
-          </View>
-
-          {/* Gemini */}
-          <View style={styles.row}>
-            <View style={styles.rowIcon}>
-              <Ionicons name="globe-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={styles.rowLabel}>Gemini 1.5 Flash</Text>
-              <Text style={styles.rowDescription}>Red/Green flags · analyse toutes les 4h</Text>
-            </View>
-            <ModelStatusBadge downloaded={!!(process.env.EXPO_PUBLIC_GEMINI_API_KEY)} />
-          </View>
-        </View>
-
-        {/* Note info */}
-        <View style={styles.aiNote}>
-          <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.aiNoteText}>
-            Les 3 modèles locaux sont embarqués dans l'application — aucun téléchargement requis. L'analyse complète s'effectue toutes les 4 heures.
-          </Text>
-        </View>
-      </View>
-
       {/* Confidentialité */}
       <Section
         title="Confidentialité & Données"
@@ -457,22 +366,9 @@ function getStyles(colors: YoumeColors) {
     rowLabel: { fontSize: TYPOGRAPHY.size.md, color: colors.textPrimary },
     rowLabelDanger: { color: colors.error },
     rowDescription: { fontSize: TYPOGRAPHY.size.xs, color: colors.textMuted, marginTop: 2 },
-    aiNote: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 6,
-      marginTop: SPACING.sm,
-      paddingHorizontal: SPACING.xs,
-    },
-    aiNoteText: {
-      flex: 1,
-      fontSize: TYPOGRAPHY.size.xs,
-      color: colors.textMuted,
-      lineHeight: 17,
-    },
     about: { alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.xl, gap: SPACING.xs },
     aboutTitle: { fontSize: TYPOGRAPHY.size.md, fontWeight: '700', color: colors.textSecondary },
     aboutVersion: { fontSize: TYPOGRAPHY.size.sm, color: colors.textMuted },
     aboutDesc: { fontSize: TYPOGRAPHY.size.xs, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
   });
-}
+          }
