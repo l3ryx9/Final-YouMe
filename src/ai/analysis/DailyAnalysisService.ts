@@ -18,6 +18,11 @@
  *  4. Les messages bruts de la journée
  *
  * Un seul appel API par conversation par nuit → économique sur le plan gratuit.
+ *
+ * FIX SÉCURITÉ : l'appel Gemini passe désormais par l'Edge Function
+ * `gemini-proxy` (clé API et modèle définis côté serveur) au lieu d'un
+ * fetch direct avec une clé embarquée dans le bundle client. Voir
+ * GeminiProxyService.ts et supabase/functions/gemini-proxy/index.ts.
  */
 import type { Message } from '@domain/entities/Message';
 import type {
@@ -32,21 +37,16 @@ import {
   toDateString,
 } from '@infrastructure/storage/LocalMemoryRepository';
 import { messageRepository } from '@infrastructure/supabase/MessageRepository';
+import { geminiProxyService } from '@infrastructure/supabase/GeminiProxyService';
+import { useAuthStore } from '@presentation/stores/authStore';
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_MESSAGES_PER_DAY = 200;
 
 export class DailyAnalysisService {
-  private readonly apiKey: string | null;
-  private readonly model: string;
-
-  constructor() {
-    this.apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? null;
-    this.model = process.env.EXPO_PUBLIC_GEMINI_MODEL ?? 'gemini-2.5-flash';
-  }
-
   isAvailable(): boolean {
-    return this.apiKey !== null && this.apiKey.length > 0;
+    // La clé vit désormais côté serveur — la seule condition côté client
+    // est d'avoir une session active (l'Edge Function exige un JWT valide).
+    return useAuthStore.getState().isAuthenticated;
   }
 
   /**
@@ -288,32 +288,24 @@ JSON ATTENDU :
   // ─── Appel API ───────────────────────────────────────────────────────────────
 
   private async callGemini(prompt: string): Promise<string> {
-    const url = `${GEMINI_API_URL}/${this.model}:generateContent?key=${this.apiKey}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 3000,
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        ],
-      }),
+    const data = await geminiProxyService.generateContent({
+      prompt,
+      generationConfig: {
+        temperature: 0.2,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 3000,
+      },
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ],
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(`Gemini API ${response.status}: ${JSON.stringify(err)}`);
+    if (!data) {
+      throw new Error('gemini-proxy indisponible (session absente, panne, ou rate limit)');
     }
 
-    const data = await response.json();
     return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 
@@ -422,4 +414,4 @@ function yesterday(): Date {
   const d = new Date();
   d.setDate(d.getDate() - 1);
   return d;
-}
+      }
