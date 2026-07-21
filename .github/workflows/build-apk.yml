@@ -42,7 +42,7 @@ jobs:
         if: ${{ env.KS != '' }}
         env:
           KS: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KS" | base64 -d > $RUNNER_TEMP/youme-release.keystore
+        run: echo "$KS" | tr -d ' \t\n\r' | base64 -d > $RUNNER_TEMP/youme-release.keystore
 
       - name: Build release APK (signé + obfusqué)
         if: ${{ env.KS != '' }}
