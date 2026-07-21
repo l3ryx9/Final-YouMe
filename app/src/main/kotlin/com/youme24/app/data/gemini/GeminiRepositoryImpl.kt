@@ -6,6 +6,7 @@ import com.youme24.app.domain.model.RelationalFlag
 import com.youme24.app.domain.repository.IGeminiRepository
 import io.github.jan.supabase.functions.functions
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

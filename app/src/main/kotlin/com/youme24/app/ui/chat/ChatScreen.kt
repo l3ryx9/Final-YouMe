@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.youme24.app.ui.components.*
 import com.youme24.app.ui.theme.Spacing
+import com.youme24.app.ui.theme.youMeColors
 
 /**
  * Écran de chat 1-to-1 — équivalent de app/(app)/chat/[id].tsx.

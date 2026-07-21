@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.*
@@ -140,7 +141,7 @@ fun LocationMapModal(location: MessageLocation, onDismiss: () -> Unit) {
                     onClick  = onDismiss,
                     modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.xs),
                 ) {
-                    Icon(androidx.compose.material.icons.Icons.Outlined.Close, "Fermer")
+                    Icon(Icons.Outlined.Close, "Fermer")
                 }
             }
         }

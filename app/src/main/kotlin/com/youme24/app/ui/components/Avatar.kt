@@ -14,8 +14,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.compose.SubcomposeAsyncImage
+import coil3.compose.SubcomposeAsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.youme24.app.ui.theme.AvatarShape
 
 /**
@@ -35,7 +36,7 @@ fun Avatar(
 ) {
     if (photoUrl != null) {
         SubcomposeAsyncImage(
-            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+            model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
                 .data(photoUrl)
                 .crossfade(true)
                 .build(),

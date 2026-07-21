@@ -15,6 +15,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.youme24.app.ui.components.Avatar
 import com.youme24.app.ui.components.ThemedAlert
 import com.youme24.app.ui.theme.Spacing
+import com.youme24.app.ui.theme.youMeColors
 
 /**
  * Écran partenaires — équivalent de app/(app)/(tabs)/partners.tsx.

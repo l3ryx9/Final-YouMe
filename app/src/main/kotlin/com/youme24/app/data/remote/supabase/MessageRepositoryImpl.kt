@@ -7,6 +7,7 @@ import com.youme24.app.domain.model.Message
 import com.youme24.app.domain.model.MessageStatus
 import com.youme24.app.domain.repository.IMessageRepository
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -31,7 +32,7 @@ class MessageRepositoryImpl @Inject constructor(
         runCatching {
             db["conversations"].select {
                 filter { contains("participant_ids", listOf(userId)) }
-                order("updated_at", ascending = false)
+                order("updated_at", Order.DESCENDING)
             }.decodeList<ConversationDto>().map { it.toDomain() }
         }
 
@@ -90,7 +91,7 @@ class MessageRepositoryImpl @Inject constructor(
                 eq("is_deleted", false)
                 before?.let { lte("created_at", it) }
             }
-            order("created_at", ascending = false)
+            order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList<MessageDto>().map { it.toDomain() }.reversed()
     }

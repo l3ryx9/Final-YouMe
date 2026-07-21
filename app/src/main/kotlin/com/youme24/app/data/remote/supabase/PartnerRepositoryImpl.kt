@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -88,7 +90,7 @@ class PartnerRepositoryImpl @Inject constructor(
     override suspend fun acceptPartnerRequest(requestId: String): Result<Partner> =
         runCatching {
             // Call the RPC function accept_partner_request(request_id)
-            db.rpc("accept_partner_request", mapOf("request_id" to requestId))
+            db.rpc("accept_partner_request", buildJsonObject { put("request_id", requestId) })
             val uid = currentUserId ?: error("Not authenticated")
             db["partners"].select { filter { eq("user_id", uid) } }
                 .decodeSingle<PartnerDto>().toDomain()

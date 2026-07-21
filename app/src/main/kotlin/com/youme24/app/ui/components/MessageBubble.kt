@@ -119,7 +119,7 @@ fun MessageBubble(
                         }
                         MessageType.IMAGE -> {
                             // Coil 3 loads image from storageUrl or localPath
-                            coil.compose.AsyncImage(
+                            coil3.compose.AsyncImage(
                                 model             = message.storageUrl ?: message.imageLocalPath,
                                 contentDescription = "Image",
                                 modifier          = Modifier

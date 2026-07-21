@@ -5,6 +5,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -185,13 +190,13 @@ private fun AppScaffold(
 ) {
     val tabs = listOf(
         BottomTab(Conversations, "Discussions",
-            androidx.compose.material.icons.Icons.Outlined.Chat),
+            Icons.AutoMirrored.Outlined.Chat),
         BottomTab(Partners,      "Partenaires",
-            androidx.compose.material.icons.Icons.Outlined.Favorite),
+            Icons.Outlined.FavoriteBorder),
         BottomTab(Search,        "Recherche",
-            androidx.compose.material.icons.Icons.Outlined.Search),
+            Icons.Outlined.Search),
         BottomTab(Settings,      "Paramètres",
-            androidx.compose.material.icons.Icons.Outlined.Settings),
+            Icons.Outlined.Settings),
     )
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()

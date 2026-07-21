@@ -50,7 +50,7 @@ fun AnimatedYouMeLogo(
  */
 @Composable
 fun YouMeLogoFallback(size: Dp, modifier: Modifier = Modifier) {
-    coil.compose.AsyncImage(
+    coil3.compose.AsyncImage(
         model              = R.drawable.ic_youme_logo,
         contentDescription = "YouMe",
         modifier           = modifier.size(size),
