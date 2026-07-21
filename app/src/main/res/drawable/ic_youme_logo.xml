@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Cercle fond ananas -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M48,48m-46,0a46,46 0,1 1,92 0a46,46 0,1 1,-92 0" />
+    <!-- Coeur -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,70 C46,68 24,54 24,40 C24,31 31,26 38,26 C43,26 46,29 48,32 C50,29 53,26 58,26 C65,26 72,31 72,40 C72,54 50,68 48,70 Z" />
+    <!-- Feuilles d'ananas -->
+    <path
+        android:fillColor="#7CB342"
+        android:pathData="M48,10 L43,20 L48,17 L53,20 Z" />
+</vector>
