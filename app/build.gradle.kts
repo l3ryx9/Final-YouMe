@@ -107,7 +107,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     // Supabase SDK
-    implementation(libs.supabase.gotrue)
+    implementation(libs.supabase.auth)
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
