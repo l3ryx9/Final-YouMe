@@ -14,6 +14,8 @@ import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -149,9 +151,6 @@ class MessageRepositoryImpl @Inject constructor(
 }
 
 // Minimal DTO for Conversation (same pattern as MessageDto)
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-
 @Serializable
 private data class ConversationDto(
     @SerialName("id")               val id: String,
