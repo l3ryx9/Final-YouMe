@@ -20,10 +20,22 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Supabase config — replace with your real values or load from local.properties
-        buildConfigField("String", "SUPABASE_URL", "\"https://YOUR_PROJECT.supabase.co\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"YOUR_ANON_KEY\"")
-        buildConfigField("String", "MAPS_API_KEY", "\"YOUR_MAPS_API_KEY\"")
+        // Clés chargées depuis local.properties (rempli par le workflow CI), sinon valeurs factices
+        val localProps = java.util.Properties().apply {
+            val f = rootProject.file("local.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }
+        fun prop(key: String, fallback: String): String =
+            (localProps.getProperty(key) ?: System.getenv(key) ?: fallback).trim()
+
+        val supabaseUrl = prop("SUPABASE_URL", "https://YOUR_PROJECT.supabase.co")
+        val supabaseKey = prop("SUPABASE_ANON_KEY", "YOUR_ANON_KEY")
+        val mapsApiKey = prop("MAPS_API_KEY", "")
+
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     signingConfigs {
