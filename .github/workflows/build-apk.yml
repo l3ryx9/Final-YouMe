@@ -34,7 +34,8 @@ jobs:
         run: echo "$HAS_GS" > app/google-services.json
 
       - name: Diagnostic — packages présents dans google-services.json
-        run: grep -o '"package_name": *"[^"]*"' app/google-services.json || echo "aucun package trouvé"
+        run: |
+          grep -o 'package_name[^,}]*' app/google-services.json || echo "aucun package trouve"
 
       - name: Build debug APK
         run: |
