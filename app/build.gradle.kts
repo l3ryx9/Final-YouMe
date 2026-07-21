@@ -13,7 +13,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.youme24.app"
+        applicationId = "com.youme24.appname"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
