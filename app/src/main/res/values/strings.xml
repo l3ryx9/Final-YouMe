@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YouMe</string>
+    <string name="app_description">L\'application couple qui vous rapproche</string>
+
+    <!-- Auth -->
+    <string name="login_title">Se connecter</string>
+    <string name="register_title">Créer un compte</string>
+    <string name="forgot_password_title">Mot de passe oublié</string>
+    <string name="email_hint">Email</string>
+    <string name="password_hint">Mot de passe</string>
+    <string name="confirm_password_hint">Confirmer le mot de passe</string>
+    <string name="username_hint">Nom d\'utilisateur</string>
+    <string name="display_name_hint">Prénom ou surnom</string>
+
+    <!-- Navigation -->
+    <string name="tab_discussions">Discussions</string>
+    <string name="tab_partners">Partenaires</string>
+    <string name="tab_search">Recherche</string>
+    <string name="tab_settings">Paramètres</string>
+
+    <!-- Chat -->
+    <string name="message_hint">Message…</string>
+    <string name="send">Envoyer</string>
+    <string name="voice_message">Message vocal</string>
+    <string name="location_share">Position partagée</string>
+
+    <!-- AI -->
+    <string name="ask_ai">Demander à l\'IA</string>
+    <string name="ai_analysis">Analyse IA</string>
+    <string name="coherence_score">Score de cohérence</string>
+
+    <!-- Settings -->
+    <string name="dark_mode">Mode sombre</string>
+    <string name="ai_enabled">Analyse IA activée</string>
+    <string name="notifications_enabled">Notifications push</string>
+    <string name="logout">Se déconnecter</string>
+    <string name="delete_account">Supprimer mon compte</string>
+
+    <!-- Errors -->
+    <string name="error_network">Erreur réseau. Vérifiez votre connexion.</string>
+    <string name="error_auth">Identifiants incorrects.</string>
+    <string name="error_generic">Une erreur est survenue. Réessayez.</string>
+
+    <!-- Permissions -->
+    <string name="permission_location">YouMe a besoin d\'accéder à votre position pour le partage en direct.</string>
+    <string name="permission_audio">YouMe a besoin d\'accéder au microphone pour les messages vocaux.</string>
+    <string name="permission_notification">Activez les notifications pour ne manquer aucun message.</string>
+</resources>

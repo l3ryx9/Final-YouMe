@@ -1,0 +1,21 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Sensitive files — NE PAS committer
+app/google-services.json
+app/src/main/kotlin/com/youme24/app/BuildConfig.kt
+
+# Keystore
+*.jks
+*.keystore
+
+# Gradle wrapper (facultatif selon préférence équipe)
+gradle/wrapper/gradle-wrapper.jar

@@ -1,0 +1,11 @@
+# Copier ce fichier en local.properties et remplir les valeurs
+# NE PAS committer local.properties (il est dans .gitignore)
+
+sdk.dir=/path/to/your/Android/sdk
+
+# Supabase
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
+
+# Google Maps (obtenir sur https://console.cloud.google.com)
+MAPS_API_KEY=YOUR_MAPS_API_KEY_HERE

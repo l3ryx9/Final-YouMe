@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Used by the XML theme (before Compose loads) -->
+    <!-- Pineapple Paradise 3D -->
+    <color name="primary">#F4C63A</color>
+    <color name="primary_dark">#C96A1E</color>
+    <color name="background">#FFF8E7</color>
+    <color name="background_dark">#0B1A1E</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_primary">#1A1200</color>
+    <color name="accent_coral">#FF6F61</color>
+    <color name="accent_green">#2E7D32</color>
+</resources>
