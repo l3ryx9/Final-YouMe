@@ -38,8 +38,33 @@ jobs:
           chmod +x ./gradlew || gradle wrapper
           ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Decode keystore (release)
+        if: ${{ env.KS != '' }}
+        env:
+          KS: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KS" | base64 -d > $RUNNER_TEMP/youme-release.keystore
+
+      - name: Build release APK (signé + obfusqué)
+        if: ${{ env.KS != '' }}
+        env:
+          KS: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PATH: ${{ runner.temp }}/youme-release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: youme-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload release APK
+        if: ${{ env.KS != '' }}
+        env:
+          KS: ${{ secrets.KEYSTORE_BASE64 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: youme-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
